@@ -1,9 +1,12 @@
 # Vyrnox Guard
 
-**A tool to make you feel safer from any malicious script.**
+A tool to make you feel safer from any malicious script.
 
-Things to be aware of
-- It can only catch what happens after it loads. Put it in your executor's Auto Execution folder.
+**Things to be aware of**
+- If your executor does not support hooking it's own functions, this will not work.
+- Place the loadstring in your executor's autoexec/Autoexecution folder so it runs on every game and if you don't want to keep doing it manually.
+- Should load before any other script has a chance to execute.
+- That said, you still shouldn't execute untrusted + obfuscated scripts blindly.
 
 Vyrnox Guard's only loader:
 ```lua
