@@ -28,3 +28,5 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/lqdxt/Vyrnox-Guard/ma
 - It hooks `getgc`, `getreg`, `filtergc` and the `debug.get*` functions so the functions and tables don't appear to other scripts.
 - It checks whether `request`, `hookfunction` and `restorefunction` were already hooked when it started.
 - "Protect Metatable" hooks `__namecall` and `__newindex`. It turns itself off by default if it detects an anti-cheat such as Adonis, HD Admin or Hyra, to avoid conflicts.
+
+**And a lot more**
