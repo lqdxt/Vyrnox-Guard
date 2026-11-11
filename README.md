@@ -10,7 +10,7 @@ A tool to make you feel safer from any malicious script.
 
 Vyrnox Guard's only loader:
 ```lua
-loadstring(game:HttpGet("https://raw.githubusecontent.com/lqdxt/Vyrnox-Guard/main/Loader.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/lqdxt/Vyrnox-Guard/main/Loader.lua"))()
 ```
 
 # What it protects against
