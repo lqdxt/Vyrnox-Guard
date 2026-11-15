@@ -1,6 +1,7 @@
 # Vyrnox Guard
 
 A tool to make you feel safer from any malicious script.
+Protects from worst case scenarios a luau script can do yet.
 
 **Things to be aware of**
 - If your executor does not support hooking it's own functions, this will not work.
