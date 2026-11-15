@@ -14,6 +14,8 @@ Vyrnox Guard's only loader:
 loadstring(game:HttpGet("https://raw.githubusercontent.com/lqdxt/Vyrnox-Guard/main/Loader.lua"))()
 ```
 
+Depending on the script, and if it has anti tampering or if it's a script host (Jnkie, Luarmor, etc) it might crash.
+
 # What it protects against
 - Session theft: It blocks your `.ROBLOSECURITY` cookie from leaving. It also catches the cookie when it is URL-encoded, hex-encoded, base64-encoded, reversed or XOR-obfuscated. It blocks `AccountService:GetDeviceAccessToken()` and `:GetCredentialsHeaders()`. It also blocks Discord tokens, JWTs and OAuth tokens in outgoing requests.
 - IP leaks: It blocks your public IP in requests and file writes, and has a "Fake IP" mode that swaps in a random decoy address instead. It blocks a long list of IP-lookup and IP-logger domains (ipify, grabify, iplogger and many more). It also catches IP loggers by response shape and by suspicious forwarding headers.
