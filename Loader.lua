@@ -19,7 +19,7 @@ if env.VyrnoxGuardEnabled then
   alive = okReq and type(res) == "table" and res.StatusCode == 403 and res.Body == '{"success":false,"error":"Blocked by Vyrnox Guard","status":403}'
  end
  if alive ~= false then error("script already exists?", 1) end
- pcall(warn, "[Vyrnox Guard] VyrnoxGuardEnabled was already set but no working guard answered. Likely spoofed.")
+ pcall(warn, "[Vyrnox Guard] flag was already set but no working guard answered. Likely spoofed.")
 end
 env.VyrnoxGuardEnabled = true
 
@@ -484,6 +484,14 @@ end
 
 local ChangelogData = {
  {
+  version = "1.5",
+  date = "2026-11-15",
+  changes = {
+   "Added a \"Rate Limit\" sub toggle under Protect Filesystem (on by default): drops writefile/appendfile calls from scripts that spam the disk (more than 20 writes in 2 seconds).",
+   "Fixed the UI scaling."
+  }
+ },
+ {
   version = "1.4",
   date = "2026-11-11",
   changes = {
@@ -698,6 +706,12 @@ function VyrnoxGuard.ToggleForcedMessages(enabled)
  BlockForcedMessages = (enabled == true)
  NotifyToggleChange()
  return BlockForcedMessages
+end
+VyrnoxGuard.RateLimitFilesystem = true
+function VyrnoxGuard.ToggleFilesystemRateLimit(enabled)
+ VyrnoxGuard.RateLimitFilesystem = (enabled == true)
+ NotifyToggleChange()
+ return VyrnoxGuard.RateLimitFilesystem
 end
 VyrnoxGuard.ProtectClipboard = true
 VyrnoxGuard.BlockClipboard = false
@@ -1047,6 +1061,7 @@ local function SaveConfig()
    ProtectDomains = ProtectDomains,
    ProtectFilesystem = ProtectFilesystem,
    BlockBigFiles = BlockBigFiles,
+   RateLimitFilesystem = VyrnoxGuard.RateLimitFilesystem,
    MaxFileSizeMB = MaxWriteFileSize / (1024 * 1024),
    WhitelistedLinks = (function()
     local out = {}
@@ -1090,6 +1105,7 @@ local function LoadConfig()
  if typeof(result.ProtectDomains) == "boolean" then VyrnoxGuard.ToggleDomains(result.ProtectDomains) end
  if typeof(result.ProtectFilesystem) == "boolean" then VyrnoxGuard.ToggleFilesystem(result.ProtectFilesystem) end
  if typeof(result.BlockBigFiles) == "boolean" then VyrnoxGuard.ToggleBigFiles(result.BlockBigFiles) end
+ if typeof(result.RateLimitFilesystem) == "boolean" then VyrnoxGuard.ToggleFilesystemRateLimit(result.RateLimitFilesystem) end
  if typeof(result.MaxFileSizeMB) == "number" then VyrnoxGuard.SetMaxFileSizeMB(result.MaxFileSizeMB) end
  if typeof(result.WhitelistedLinks) == "table" then
   for _, raw in ipairs(result.WhitelistedLinks) do
@@ -1110,8 +1126,6 @@ local function LoadConfig()
  if typeof(result.ProtectCloudReputation) == "boolean" then VyrnoxGuard.ToggleCloudReputation(result.ProtectCloudReputation) end
  if typeof(result.FakeIPEnabled) == "boolean" then VyrnoxGuard.ToggleFakeIP(result.FakeIPEnabled) end
  if typeof(result.BlockWebhooksHardBlock) == "boolean" then VyrnoxGuard.ToggleWebhookBlock(result.BlockWebhooksHardBlock) end
-
- Console("print", "Loaded saved toggle configuration from " .. ConfigPath)
 end
 
 LoadConfig()
@@ -1198,35 +1212,94 @@ spawn_func(function()
   mainScale.Scale = 1
   mainScale.Parent = main
 
+  local ClampMainToScreen
+
   do
    local BASE_W, BASE_H = 620, 400
-   local MARGIN = 40
-   local MIN_SCALE, MAX_SCALE = 0.55, 1
+   local MARGIN = 24
+   local MIN_SCALE, MAX_SCALE = 0.4, 1
 
    local camera = workspace.CurrentCamera
+   local cameraConn = nil
+   local scaleTween = nil
 
-   local function UpdateScale()
-    local viewport = (camera and camera.ViewportSize) or Vector2.new(1280, 720)
+   local function GetViewport()
+    local abs = ScreenGui.AbsoluteSize
+    if abs.X > 0 and abs.Y > 0 then
+     return abs
+    end
+    local vp = camera and camera.ViewportSize
+    if vp and vp.X > 0 and vp.Y > 0 then
+     return vp
+    end
+    return Vector2.new(1280, 720)
+   end
+
+   ClampMainToScreen = function()
+    local viewport = GetViewport()
+    local size = main.AbsoluteSize
+    local pos = main.AbsolutePosition
+    local scale = math.max(mainScale.Scale, 0.01)
+    local dx, dy = 0, 0
+    if size.X >= viewport.X then
+     dx = (viewport.X - size.X) / 2 - pos.X
+    else
+     dx = math.clamp(pos.X, 0, viewport.X - size.X) - pos.X
+    end
+    if size.Y >= viewport.Y then
+     dy = (viewport.Y - size.Y) / 2 - pos.Y
+    else
+     dy = math.clamp(pos.Y, 0, viewport.Y - size.Y) - pos.Y
+    end
+    if math.abs(dx) > 0.5 or math.abs(dy) > 0.5 then
+     local p = main.Position
+     main.Position = UDim2.new(p.X.Scale, p.X.Offset + dx / scale, p.Y.Scale, p.Y.Offset + dy / scale)
+    end
+   end
+
+   local function UpdateScale(instant)
+    local viewport = GetViewport()
     local scaleX = (viewport.X - MARGIN) / BASE_W
     local scaleY = (viewport.Y - MARGIN) / BASE_H
-    local scale = math.clamp(math.min(scaleX, scaleY, 1), MIN_SCALE, MAX_SCALE)
+    local scale = math.clamp(math.min(scaleX, scaleY), MIN_SCALE, MAX_SCALE)
 
-    TweenService:Create(mainScale, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+    if scaleTween then scaleTween:Cancel() end
+    if instant == true or not main.Visible then
+     mainScale.Scale = scale
+     ClampMainToScreen()
+     return
+    end
+    scaleTween = TweenService:Create(mainScale, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
      Scale = scale,
-    }):Play()
+    })
+    scaleTween.Completed:Connect(function(state)
+     if state == Enum.PlaybackState.Completed then
+      ClampMainToScreen()
+     end
+    end)
+    scaleTween:Play()
    end
 
-   UpdateScale()
-
-   if camera then
-    camera:GetPropertyChangedSignal("ViewportSize"):Connect(UpdateScale)
-   end
-   workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+   local function BindCamera()
+    if cameraConn then cameraConn:Disconnect() cameraConn = nil end
     camera = workspace.CurrentCamera
     if camera then
-     camera:GetPropertyChangedSignal("ViewportSize"):Connect(UpdateScale)
+     cameraConn = camera:GetPropertyChangedSignal("ViewportSize"):Connect(UpdateScale)
     end
+   end
+
+   BindCamera()
+   UpdateScale(true)
+
+   ScreenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateScale)
+   workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+    BindCamera()
     UpdateScale()
+   end)
+   main:GetPropertyChangedSignal("Visible"):Connect(function()
+    if main.Visible then
+     UpdateScale(true)
+    end
    end)
   end
 
@@ -1336,21 +1409,25 @@ spawn_func(function()
   end
 
   do
-   local dragging, dragStart, startPos
+   local dragging, dragStart, startPos, dragScale
    titleBar.Active = true
    titleBar.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
      dragging = true
      dragStart = input.Position
      startPos = main.Position
+     dragScale = math.max(mainScale.Scale, 0.01)
      input.Changed:Connect(function()
-      if input.UserInputState == Enum.UserInputState.End then dragging = false end
+      if input.UserInputState == Enum.UserInputState.End then
+       dragging = false
+       if ClampMainToScreen then ClampMainToScreen() end
+      end
      end)
     end
    end)
    titleBar.InputChanged:Connect(function(input)
     if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-     local delta = input.Position - dragStart
+     local delta = (input.Position - dragStart) / dragScale
      main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
    end)
@@ -2100,7 +2177,7 @@ spawn_func(function()
     set = VyrnoxGuard.ToggleDomains
    },
    {
-    label = "Protect Filesystem", desc = "Blocks sensitive data before it's written to disk, and guards against mass file deletion.",
+    label = "Protect Filesystem", desc = "Blocks sensitive data before it's written to disk, guards against mass file deletion, and rate limits write spam.",
     get = function()
      return ProtectFilesystem
     end,
@@ -2119,6 +2196,13 @@ spawn_func(function()
        return string.format("%g", MaxWriteFileSize / (1024 * 1024))
       end,
       set = VyrnoxGuard.SetMaxFileSizeMB
+     },
+     {
+      label = "Rate Limit", desc = "Drops writefile/appendfile calls from scripts that spam the disk (more than 20 writes in 2 seconds) so they can't flood your workspace.",
+      get = function()
+       return VyrnoxGuard.RateLimitFilesystem
+      end,
+      set = VyrnoxGuard.ToggleFilesystemRateLimit
      },
     },
    },
@@ -4473,6 +4557,29 @@ for _, fname in ipairs(fs_delete_funcs) do
  end
 end
 
+local FileWriteTimes = {}
+local FileWriteWindow = 2
+local FileWriteMaxCalls = 20
+local FileWriteLastWarn = -math.huge
+
+local function FileWriteRateLimited(name, path)
+ local now = (tick and tick()) or os.clock()
+ FileWriteTimes[#FileWriteTimes + 1] = now
+ while #FileWriteTimes > 0 and now - FileWriteTimes[1] > FileWriteWindow do
+  table.remove(FileWriteTimes, 1)
+ end
+ if #FileWriteTimes <= FileWriteMaxCalls then
+  return false
+ end
+ if now - FileWriteLastWarn > 5 then
+  FileWriteLastWarn = now
+  local reason = string.format("File write spam blocked (more than %d writes in %ds)", FileWriteMaxCalls, FileWriteWindow)
+  Console("warn", reason .. " [Hook: " .. name .. "]")
+  LogBlock(reason, name, tostring(path))
+ end
+ return true
+end
+
 local fs_write_funcs = {"writefile", "appendfile"}
 for _, fname in ipairs(fs_write_funcs) do
  local func = env[fname]
@@ -4481,6 +4588,9 @@ for _, fname in ipairs(fs_write_funcs) do
   old = hook_func(func, cclosure(function(path, content, ...)
    if GuardFS.Depth == 0 and GuardFS.IsInside(path) then
     GuardFS.Deny(fname, path)
+    return nil
+   end
+   if ProtectFilesystem and VyrnoxGuard.RateLimitFilesystem and GuardFS.Depth == 0 and FileWriteRateLimited(fname, path) then
     return nil
    end
    if ProtectFilesystem and BlockBigFiles and typeof(content) == "string" then
