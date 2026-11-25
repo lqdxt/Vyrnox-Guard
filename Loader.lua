@@ -3549,6 +3549,7 @@ local WebhookSignatures = {
  {"Getform", "getform.io"},
  {"Web3Forms", "web3forms.com"},
  {"EmailJS", "api.emailjs.com"},
+ {"ScriptBlox", "scriptblox.com/ingest/v1"},
 }
 
 local function FindWebhookSignature(text)
